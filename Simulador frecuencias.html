@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Simulador Maestro de Ingeniería de Espectro</title>
+    <style>
+        :root { --accent: #00d9ff; --bg: #050508; --panel: rgba(15, 15, 25, 0.98); }
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: #eee; }
+        
+        /* Contenedor Principal de UI */
+        #ui-master { position: absolute; top: 10px; left: 10px; width: 380px; z-index: 100; display: flex; flex-direction: column; gap: 10px; max-height: 95vh; overflow-y: auto; padding-right: 5px; }
+        
+        .panel { background: var(--panel); padding: 18px; border-radius: 12px; border: 1px solid #334; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+        h3 { margin: 0 0 12px 0; font-size: 14px; letter-spacing: 1.5px; color: var(--accent); text-transform: uppercase; border-bottom: 1px solid #334; padding-bottom: 5px; }
+        
+        /* Controles de Selección */
+        .mode-selector { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; margin-bottom: 15px; }
+        button { background: #1a1a25; color: #ccc; border: 1px solid #445; padding: 10px 5px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 11px; transition: 0.3s; }
+        button:hover { background: #252535; }
+        button.active { background: var(--accent); color: #000; border-color: var(--accent); box-shadow: 0 0 15px var(--accent); }
+
+        /* Sliders y Datos */
+        .control-group { margin-bottom: 12px; }
+        label { display: block; font-size: 11px; color: #889; margin-bottom: 4px; }
+        input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+        .val-display { float: right; color: var(--accent); font-family: monospace; }
+
+        /* Acciones de Tráfico */
+        .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+        .btn-action { border-color: #00ff88; color: #00ff88; background: rgba(0, 255, 136, 0.05); }
+        .btn-action:hover { background: #00ff88; color: #000; }
+        .btn-danger { border-color: #ff4444; color: #ff4444; background: rgba(255, 68, 68, 0.05); }
+        .btn-danger.on { background: #ff4444; color: #000; }
+
+        /* Monitor de Ingeniería */
+        #monitor { background: rgba(0, 20, 40, 0.9); border-left: 3px solid var(--accent); padding: 12px; font-size: 12px; line-height: 1.4; border-radius: 0 8px 8px 0; }
+        
+        /* Etiquetas 3D Overlay */
+        .label3d { position: absolute; pointer-events: none; font-weight: bold; font-size: 11px; color: #556; text-shadow: 1px 1px 2px #000; text-transform: uppercase; }
+        
+        /* Leyenda */
+        .legend { display: flex; justify-content: space-around; margin-top: 10px; font-size: 10px; background: #000; padding: 5px; border-radius: 4px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+    </style>
+</head>
+<body>
+
+<div id="l-freq" class="label3d">↑ Frecuencia (f)</div>
+<div id="l-time" class="label3d">Tiempo (t) →</div>
+
+<div id="ui-master">
+    <div class="panel">
+        <h3>Tecnología de Acceso</h3>
+        <div class="mode-selector">
+            <button onclick="setMode('FDMA')" id="btn-FDMA">FDMA</button>
+            <button onclick="setMode('TDMA')" id="btn-TDMA">TDMA</button>
+            <button onclick="setMode('CDMA')" id="btn-CDMA">CDMA</button>
+        </div>
+        <div class="legend">
+            <span><div class="dot" style="background:#3498db"></div> User 1</span>
+            <span><div class="dot" style="background:#e74c3c"></div> User 2</span>
+            <span><div class="dot" style="background:#2ecc71"></div> User 3</span>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3>Parámetros del Canal</h3>
+        
+        <div class="control-group">
+            <label>Ruido de Fondo (AWGN): <span class="val-display" id="v-noise">0.2</span></label>
+            <input type="range" min="0" max="4" step="0.1" value="0.2" oninput="updateParam('noise', this.value)">
+        </div>
+
+        <div class="control-group" id="ctrl-df">
+            <label>Separación Δf (Guard Band): <span class="val-display" id="v-df">7.0</span></label>
+            <input type="range" min="2" max="15" step="0.5" value="7" oninput="updateParam('df', this.value)">
+        </div>
+
+        <div class="control-group" id="ctrl-sf" style="display:none">
+            <label>Spreading Factor (SF): <span class="val-display" id="v-sf">16</span></label>
+            <input type="range" min="4" max="64" step="4" value="16" oninput="updateParam('sf', this.value)">
+        </div>
+
+        <div class="action-grid">
+            <button class="btn-action" onclick="spawnPackets(1)">📧 ENVÍO ÚNICO</button>
+            <button class="btn-action" onclick="sendSimultaneous()">⚡ TRÁFICO MASIVO</button>
+            <button class="btn-danger" id="btn-jammer" onclick="toggleJammer()">📡 BLOQUEADOR</button>
+            <button style="border-color:#bb88ff; color:#bb88ff" onclick="toggleStealth()">👤 MODO SIGILO</button>
+        </div>
+    </div>
+
+    <div id="monitor">
+        <b style="color:var(--accent)">SISTEMA DE DIAGNÓSTICO:</b><br>
+        <div id="monitor-text">Iniciando simulador maestro... Seleccione un protocolo para empezar.</div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+    let scene, camera, renderer, particles = [], activePackets = [];
+    let mode = 'FDMA', jammerActive = false, stealthMode = false;
+    let jammerMesh;
+    const params = { noise: 0.2, df: 7, sf: 16, ts: 1.5 };
+    const colors = [0x3498db, 0xe74c3c, 0x2ecc71];
+
+    function init() {
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+        camera.position.set(35, 25, 35);
+        camera.lookAt(0,0,0);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        scene.add(new THREE.GridHelper(70, 20, 0x333344, 0x111122));
+
+        // Jammer Mesh
+        jammerMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(12, 40, 12),
+            new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true, transparent: true, opacity: 0 })
+        );
+        scene.add(jammerMesh);
+
+        // Crear usuarios
+        for (let u = 0; u < 3; u++) {
+            const geo = new THREE.BufferGeometry();
+            const pos = new Float32Array(1500 * 3);
+            geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+            particles.push(new THREE.Points(geo, new THREE.PointsMaterial({ color: colors[u], size: 0.15, transparent: true, opacity: 0.3 })));
+            scene.add(particles[u]);
+        }
+
+        setMode('FDMA');
+        animate();
+    }
+
+    function updateParam(id, val) {
+        params[id] = parseFloat(val);
+        document.getElementById('v-' + id).innerText = val;
+        explainPhysics(id, val);
+    }
+
+    function setMode(m) {
+        mode = m;
+        document.querySelectorAll('.mode-selector button').forEach(b => b.classList.remove('active'));
+        document.getElementById('btn-' + mode).classList.add('active');
+        
+        // Toggle visibility of specific controls
+        document.getElementById('ctrl-df').style.display = (m === 'FDMA') ? 'block' : 'none';
+        document.getElementById('ctrl-sf').style.display = (m === 'CDMA') ? 'block' : 'none';
+        
+        activePackets.forEach(p => scene.remove(p.mesh));
+        activePackets = [];
+        explainPhysics('MODE', m);
+    }
+
+    function toggleJammer() {
+        jammerActive = !jammerActive;
+        jammerMesh.material.opacity = jammerActive ? 0.3 : 0;
+        document.getElementById('btn-jammer').classList.toggle('on');
+        explainPhysics('JAMMER', jammerActive);
+    }
+
+    function toggleStealth() {
+        stealthMode = !stealthMode;
+        explainPhysics('STEALTH', stealthMode);
+    }
+
+    function spawnPackets(n) {
+        for(let i=0; i<n; i++) {
+            setTimeout(() => createPacket(Math.floor(Math.random()*3)), i*200);
+        }
+    }
+
+    function sendSimultaneous() {
+        for(let i=0; i<3; i++) createPacket(i);
+    }
+
+    function createPacket(uId) {
+        const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.8, 12, 12), new THREE.MeshBasicMaterial({ color: colors[uId] }));
+        scene.add(mesh);
+        activePackets.push({ mesh, uId, progress: -35, speed: 0.2 + Math.random()*0.1 });
+    }
+
+    function explainPhysics(id, val) {
+        const mon = document.getElementById('monitor-text');
+        if(id === 'MODE') {
+            if(val==='FDMA') mon.innerHTML = "<b>Modo FDMA:</b> División por frecuencia. Ideal para señales continuas pero rígido en capacidad.";
+            if(val==='TDMA') mon.innerHTML = "<b>Modo TDMA:</b> División por tiempo. Eficiente para ráfagas digitales, requiere sincronía GPS.";
+            if(val==='CDMA') mon.innerHTML = "<b>Modo CDMA:</b> División por código (Walsh). Los datos coexisten en el mismo espacio y tiempo.";
+        }
+        if(id === 'noise') mon.innerHTML = val > 2 ? "<b>Ruido Crítico:</b> La relación SNR cae. En FDMA verás la señal 'temblar', en CDMA el código debe ser más largo (SF)." : "Canal limpio. Máxima eficiencia de Shannon.";
+        if(id === 'JAMMER') mon.innerHTML = val ? "<span style='color:#ff4444'>ALERTA: Bloqueador activo en frecuencia central. Las señales de banda estrecha colapsarán.</span>" : "Jammer desactivado.";
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        const time = Date.now() * 0.001;
+
+        particles.forEach((p, u) => {
+            const pos = p.geometry.attributes.position.array;
+            p.visible = !stealthMode || mode === 'CDMA';
+            for (let i = 0; i < 1500; i++) {
+                let x = (i - 750) * 0.1;
+                let y=0, z=0;
+                if(mode==='FDMA') { y=(u-1)*params.df; z=Math.sin(x+time*5); }
+                else if(mode==='TDMA') { z=(Math.floor((x*0.2+time)/params.ts)%3===u)?Math.sin(x*5)*4:0; }
+                else { y=Math.sign(Math.sin(x*params.sf*0.5 + u))*2; z=(Math.random()-0.5)*params.noise*4; }
+                pos[i*3]=x; pos[i*3+1]=y; pos[i*3+2]=z;
+            }
+            p.geometry.attributes.position.needsUpdate = true;
+        });
+
+        activePackets.forEach((p, idx) => {
+            p.progress += p.speed;
+            let y=0, z=0;
+            if(mode==='FDMA') y=(p.uId-1)*params.df;
+            else if(mode==='TDMA') p.mesh.visible = (Math.floor((p.progress*0.2+time)/params.ts)%3===p.uId);
+            else { y=Math.sin(time*10+p.uId); z=Math.cos(time*10+p.uId); }
+
+            // Interacción con Jammer
+            if(jammerActive && Math.abs(p.progress) < 6) {
+                if(mode!=='CDMA' && (mode==='FDMA'&&p.uId===1 || mode==='TDMA')) p.mesh.material.color.setHex(0x444444);
+                else p.mesh.material.color.setHex(colors[p.uId]);
+            } else p.mesh.material.color.setHex(colors[p.uId]);
+
+            p.mesh.position.set(p.progress, y, z);
+            if(p.progress>35) { scene.remove(p.mesh); activePackets.splice(idx,1); }
+        });
+
+        // Update Labels
+        const vF = new THREE.Vector3(0, 20, 0).project(camera);
+        const vT = new THREE.Vector3(25, 0, 0).project(camera);
+        document.getElementById('l-freq').style.left = (vF.x+1)/2*window.innerWidth+'px';
+        document.getElementById('l-freq').style.top = -(vF.y-1)/2*window.innerHeight+'px';
+        document.getElementById('l-time').style.left = (vT.x+1)/2*window.innerWidth+'px';
+        document.getElementById('l-time').style.top = -(vT.y-1)/2*window.innerHeight+'px';
+
+        renderer.render(scene, camera);
+    }
+    init();
+</script>
+</body>
+</html>
